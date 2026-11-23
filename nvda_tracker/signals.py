@@ -36,6 +36,32 @@ def relative_volume_intraday(intraday: pd.DataFrame, lookback: int = 20) -> floa
     return float(today_cum / (sum(prior) / len(prior)))
 
 
+def snapshot(daily: pd.DataFrame, price: float, intraday: pd.DataFrame, live: bool,
+             minutes_since_open: float | None) -> dict:
+    """Plain facts about where the stock stands right now. Used in alerts and `status`."""
+    close = daily["Close"].copy()
+    close.iloc[-1] = price
+    prev = float(close.iloc[-2])
+    ma50 = float(close.rolling(50).mean().iloc[-1])
+    ma200 = float(close.rolling(200).mean().iloc[-1])
+    hi, lo = float(close.iloc[-253:].max()), float(close.iloc[-253:].min())
+    if live and minutes_since_open and minutes_since_open >= 15:
+        rv = relative_volume_intraday(intraday)
+    else:
+        base = daily["Volume"].iloc[-21:-1].mean()
+        rv = float(daily["Volume"].iloc[-1] / base) if base else None
+    return {
+        "price": price, "prev_close": prev, "pct": (price / prev - 1) * 100,
+        "session": str(daily.index[-1].date()), "live": live, "rel_volume": rv,
+        "rsi": float(rsi(close).iloc[-1]),
+        "ma50": ma50, "ma200": ma200,
+        "vs_ma50": (price / ma50 - 1) * 100, "vs_ma200": (price / ma200 - 1) * 100,
+        "high52": hi, "low52": lo, "from_high": (price / hi - 1) * 100,
+        "ret5d": (price / float(close.iloc[-6]) - 1) * 100,
+        "ret20d": (price / float(close.iloc[-21]) - 1) * 100,
+    }
+
+
 # ---------- detectors ----------
 
 def detect_price(daily: pd.DataFrame, price: float, cfg: dict, sym: str) -> list[Alert]:

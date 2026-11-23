@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import data, news, notify, signals
 from .models import CRITICAL, Alert
@@ -27,8 +27,10 @@ def collect(cfg: dict, state: State) -> tuple[list[Alert], dict]:
         live, mins = data.market_status(i if i is not None else d.iloc[0:0])
         price = float(i["Close"].iloc[-1]) if (i is not None and not i.empty
                 and i.index[-1].date() == d.index[-1].date()) else float(d["Close"].iloc[-1])
-        snap.update(price=price, live=live, prev_close=float(d["Close"].iloc[-2]),
-                    session=str(d.index[-1].date()))
+        snap.update(guard("snapshot", lambda: signals.snapshot(
+            d, price, i if i is not None else d.iloc[0:0], live, mins)) or
+            dict(price=price, live=live, prev_close=float(d["Close"].iloc[-2]),
+                 session=str(d.index[-1].date())))
         alerts += guard("price", lambda: signals.detect_price(d, price, cfg, sym)) or []
         alerts += guard("gap", lambda: signals.detect_gap(d, cfg, sym)) or []
         alerts += guard("volume", lambda: signals.detect_volume(
@@ -51,6 +53,9 @@ def collect(cfg: dict, state: State) -> tuple[list[Alert], dict]:
         alerts += na
         state.seen_news = list(dict.fromkeys(state.seen_news + list(seen_ids)))
         snap["headlines"] = len(hl)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=cfg["news"]["max_age_hours"] * 2)
+        recent = [h for h in hl if h.published >= cutoff]
+        snap["top_news"] = sorted(recent, key=lambda h: -news.impact(h.title))[:5]
 
     return alerts, snap
 
@@ -68,7 +73,7 @@ def run_once(cfg: dict, notify_on: bool = True, quiet: bool = False) -> list[Ale
         else:
             print(f"[dry-run] {a.severity} {a.kind}: {a.title}\n    {a.body}")
     if notify_on:
-        notify.send_digest(fresh, cfg)
+        notify.send_digest(fresh, cfg, snap)
     state.save()
     if not quiet:
         print(f"{datetime.now():%H:%M:%S} {cfg['general']['symbol']} "
