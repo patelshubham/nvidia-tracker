@@ -1,0 +1,36 @@
+# NVIDIA tracker configuration. Every value here overrides the built-in default.
+
+[general]
+symbol = "NVDA"
+benchmark = "SMH"          # semiconductor ETF used for relative-strength checks
+
+[notify]
+toast = true               # Windows desktop notification
+# ntfy.sh push to your phone: install the ntfy app, subscribe to a long random
+# topic name, and put it here. Anyone who knows the topic can read it, so make it unguessable.
+ntfy_topic = ""
+
+[price]
+z_warn = 2.0               # move vs. 60-day daily-return std dev
+z_critical = 3.0
+min_abs_pct = 2.0          # ignore moves smaller than this, however "unusual"
+gap_pct = 2.5              # open vs. previous close
+
+[volume]
+rel_warn = 1.6             # volume vs. same time-of-day average over last 20 sessions
+rel_critical = 2.5
+min_minutes_after_open = 30
+
+[momentum]
+return_5d_pct = 8.0
+rsi_overbought = 75
+rsi_oversold = 30
+dip_drawdown_pct = 15.0    # "opportunity" if this far below the 52w high and oversold
+relative_strength_pts = 3.0  # NVDA vs benchmark 1-day divergence
+
+[news]
+max_age_hours = 6
+warn_score = 2
+critical_score = 4
+burst_count = 10           # this many new headlines in max_age_hours = unusual attention
+

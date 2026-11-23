@@ -1,0 +1,19 @@
+[project]
+name = "nvda-tracker"
+version = "0.1.0"
+description = "Watches NVIDIA (NVDA) for abnormal volume, price momentum and news, and notifies you."
+requires-python = ">=3.11"
+dependencies = [
+    "yfinance>=0.2.50",
+    "pandas>=2.0",
+    "tzdata",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["nvda_tracker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
