@@ -44,7 +44,7 @@ def collect(cfg: dict, state: State) -> tuple[list[Alert], dict]:
         ne = guard("earnings", lambda: data.next_earnings(sym))
         alerts += signals.detect_earnings(ne, datetime.now(timezone.utc).astimezone(data.NY), sym)
 
-    hl = guard("news", news.fetch)
+    hl = guard("news", lambda: news.fetch_all(sym))
     if hl is not None:
         na, seen_ids = news.detect_news(hl, set(state.seen_news), cfg, sym,
                                         first_run=state.first_run)

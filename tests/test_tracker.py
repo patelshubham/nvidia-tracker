@@ -84,6 +84,24 @@ def test_news_alerts_dedupe_and_first_run():
     assert first == []
 
 
+def test_fetch_all_survives_one_blocked_source(monkeypatch):
+    def blocked(*a, **k):
+        raise OSError("HTTP Error 429")
+    monkeypatch.setattr(news, "fetch", blocked)
+    monkeypatch.setattr(news, "fetch_yahoo", lambda sym="NVDA": [_hl("Nvidia upgraded by analyst")])
+    assert len(news.fetch_all("NVDA")) == 1
+
+
+def test_fetch_all_raises_when_every_source_fails(monkeypatch):
+    def blocked(*a, **k):
+        raise OSError("down")
+    monkeypatch.setattr(news, "fetch", blocked)
+    monkeypatch.setattr(news, "fetch_yahoo", blocked)
+    import pytest
+    with pytest.raises(RuntimeError):
+        news.fetch_all("NVDA")
+
+
 def test_stale_news_ignored():
     alerts, _ = news.detect_news([_hl("Nvidia export ban announced", hours_ago=30)], set(), CFG, "NVDA")
     assert alerts == []

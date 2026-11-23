@@ -85,6 +85,45 @@ def fetch(query: str = "NVIDIA OR NVDA", timeout: int = 15) -> list[Headline]:
     return out
 
 
+def fetch_yahoo(sym: str = "NVDA") -> list[Headline]:
+    """Yahoo Finance headlines via yfinance. Works from cloud runners where Google News 429s."""
+    import yfinance as yf
+
+    out = []
+    for item in yf.Ticker(sym).news or []:
+        c = item.get("content") or {}
+        title = (c.get("title") or "").strip()
+        try:
+            pub = datetime.fromisoformat((c.get("pubDate") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if not title:
+            continue
+        link = ((c.get("canonicalUrl") or {}).get("url")
+                or (c.get("clickThroughUrl") or {}).get("url") or "")
+        out.append(Headline(title, (c.get("provider") or {}).get("displayName", "Yahoo Finance"),
+                            link, pub))
+    return out
+
+
+def fetch_all(sym: str = "NVDA") -> list[Headline]:
+    """Merge every source that works; only raise if all of them fail."""
+    results, errors = [], []
+    for name, fn in (("google", fetch), ("yahoo", lambda: fetch_yahoo(sym))):
+        try:
+            results.extend(fn())
+        except Exception as e:  # one blocked source must not hide the other
+            errors.append(f"{name}: {e}")
+    if not results and errors:
+        raise RuntimeError("all news sources failed: " + "; ".join(errors))
+    seen, merged = set(), []
+    for h in results:  # same story from two sources -> keep once
+        if h.uid not in seen:
+            seen.add(h.uid)
+            merged.append(h)
+    return merged
+
+
 def detect_news(headlines: list[Headline], seen: set[str], cfg: dict, sym: str,
                 now: datetime | None = None, first_run: bool = False) -> tuple[list[Alert], set[str]]:
     """Return (alerts, uids to mark seen). On first run, nothing alerts (avoids flooding)."""
