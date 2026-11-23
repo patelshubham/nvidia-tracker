@@ -23,6 +23,9 @@ def main() -> None:
         notify.send(Alert(key="test", title="NVDA tracker test",
                           body="If you can read this, notifications work.",
                           severity=WARN, kind=OPPORTUNITY), cfg)
+        notify.send_digest([Alert(key="test", title="NVDA tracker test",
+                                  body="If you got this by email, alerts reach you.",
+                                  severity=WARN, kind=OPPORTUNITY)], cfg)
     elif a.command == "dry-run":
         runner.run_once(cfg, notify_on=False)
     elif a.command == "watch":

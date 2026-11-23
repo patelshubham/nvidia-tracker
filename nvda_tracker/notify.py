@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import subprocess
 import urllib.request
@@ -42,6 +43,31 @@ def _ntfy(topic: str, alert: Alert) -> None:
         headers["Click"] = alert.url
     req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=alert.body.encode(), headers=headers)
     urllib.request.urlopen(req, timeout=10).close()
+
+
+def send_digest(alerts: list[Alert], cfg: dict) -> None:
+    """One GitHub issue per run. GitHub then emails/pushes the repo owner. Needs no extra secrets
+    in Actions (GITHUB_TOKEN + GITHUB_REPOSITORY are provided), and is skipped everywhere else."""
+    token, repo = os.environ.get("GITHUB_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
+    if not (alerts and cfg["notify"].get("github_issues") and token and repo):
+        return
+    top = max(alerts, key=lambda a: a.severity)
+    icon = _EMOJI.get(top.kind, "🟡")
+    title = f"{icon} {top.title}" + (f" (+{len(alerts) - 1} more)" if len(alerts) > 1 else "")
+    lines = []
+    for a in sorted(alerts, key=lambda a: -a.severity):
+        link = f" — [link]({a.url})" if a.url else ""
+        lines.append(f"- {_EMOJI.get(a.kind, '🟡')} **[{SEVERITY_NAMES[a.severity]}] {a.title}**\n  {a.body}{link}")
+    payload = json.dumps({"title": title[:250], "body": "\n".join(lines),
+                          "labels": ["alert", f"sev-{SEVERITY_NAMES[top.severity].lower()}"]}).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/issues", data=payload, method="POST",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json", "User-Agent": "nvda-tracker"})
+    try:
+        urllib.request.urlopen(req, timeout=15).close()
+    except Exception as e:
+        print(f"  (github issue failed: {e})")
 
 
 def send(alert: Alert, cfg: dict) -> None:

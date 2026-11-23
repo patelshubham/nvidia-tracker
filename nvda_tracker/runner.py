@@ -67,6 +67,8 @@ def run_once(cfg: dict, notify_on: bool = True, quiet: bool = False) -> list[Ale
             log_alert(a)
         else:
             print(f"[dry-run] {a.severity} {a.kind}: {a.title}\n    {a.body}")
+    if notify_on:
+        notify.send_digest(fresh, cfg)
     state.save()
     if not quiet:
         print(f"{datetime.now():%H:%M:%S} {cfg['general']['symbol']} "

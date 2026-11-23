@@ -4,13 +4,19 @@ on:
   schedule:
     - cron: "7-59/10 * * * *"   # :07 :17 :27 :37 :47 :57 (off the busy :00/:30 marks)
   workflow_dispatch:
+    inputs:
+      send_test:
+        description: "Open a test issue to confirm alerts reach you"
+        type: boolean
+        default: false
 
 concurrency:
   group: tracker
   cancel-in-progress: false
 
 permissions:
-  contents: write   # only used to append the delay log to the `telemetry` branch
+  contents: write   # append the delay log to the `telemetry` branch
+  issues: write     # open an issue per alert batch (GitHub then emails/pushes the owner)
 
 jobs:
   check:
@@ -38,9 +44,16 @@ jobs:
           key: state-${{ github.run_id }}
           restore-keys: state-
 
+      - name: Send test alert
+        if: ${{ inputs.send_test }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NVDA_TOAST: "0"
+        run: python -m nvda_tracker test-notify
+
       - name: Run tracker
         env:
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NVDA_TOAST: "0"
         run: python -m nvda_tracker check
 
