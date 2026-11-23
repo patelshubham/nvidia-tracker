@@ -58,7 +58,10 @@ def send_digest(alerts: list[Alert], cfg: dict) -> None:
     for a in sorted(alerts, key=lambda a: -a.severity):
         link = f" — [link]({a.url})" if a.url else ""
         lines.append(f"- {_EMOJI.get(a.kind, '🟡')} **[{SEVERITY_NAMES[a.severity]}] {a.title}**\n  {a.body}{link}")
-    payload = json.dumps({"title": title[:250], "body": "\n".join(lines),
+    # Assigning the repo owner is what makes GitHub notify them: a bot-created issue otherwise only
+    # notifies people who are watching the repo, and owners are not auto-subscribed.
+    owner = os.environ.get("GITHUB_REPOSITORY_OWNER") or repo.split("/")[0]
+    payload = json.dumps({"title": title[:250], "body": "\n".join(lines), "assignees": [owner],
                           "labels": ["alert", f"sev-{SEVERITY_NAMES[top.severity].lower()}"]}).encode()
     req = urllib.request.Request(
         f"https://api.github.com/repos/{repo}/issues", data=payload, method="POST",
