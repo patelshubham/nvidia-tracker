@@ -6,7 +6,29 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import yfinance as yf
 
+import time
+
 NY = ZoneInfo("America/New_York")
+
+_cache: dict[str, tuple[float, object]] = {}
+
+
+def cached(key: str, ttl: float, fn):
+    """Return fn() but reuse the last result for `ttl` seconds. Lets a fast watch loop poll live
+    prices every tick while slow-changing data (daily bars, earnings, news) is fetched rarely."""
+    now = time.monotonic()
+    hit = _cache.get(key)
+    if ttl > 0 and hit and now - hit[0] < ttl:
+        return hit[1]
+    val = fn()
+    _cache[key] = (now, val)
+    return val
+
+
+def in_session(now: datetime | None = None) -> bool:
+    """Weekday 09:00-16:15 ET (a little wider than the 09:30-16:00 session)."""
+    now = (now or datetime.now(NY)).astimezone(NY)
+    return now.weekday() < 5 and (9, 0) <= (now.hour, now.minute) <= (16, 15)
 
 
 def daily(sym: str) -> pd.DataFrame:

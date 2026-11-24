@@ -21,8 +21,11 @@ def collect(cfg: dict, state: State) -> tuple[list[Alert], dict]:
             print(f"[warn] {name} failed:\n{traceback.format_exc(limit=2)}")
             return None
 
-    d = guard("daily data", lambda: data.daily(sym))
-    i = guard("intraday data", lambda: data.intraday(sym))
+    d = guard("daily data", lambda: data.cached(f"d:{sym}", 600, lambda: data.daily(sym)))
+    i = guard("intraday data", lambda: data.intraday(sym))  # always fresh: this is the live price
+    if d is not None and i is not None and not i.empty and i.index[-1].date() > d.index[-1].date():
+        # A new session started since the daily bars were cached; refetch so prev-close is right.
+        d = guard("daily data", lambda: data.cached(f"d:{sym}", 0, lambda: data.daily(sym)))
     if d is not None and len(d) > 30:
         live, mins = data.market_status(i if i is not None else d.iloc[0:0])
         price = float(i["Close"].iloc[-1]) if (i is not None and not i.empty
@@ -43,16 +46,16 @@ def collect(cfg: dict, state: State) -> tuple[list[Alert], dict]:
             snap["bar_time"] = f"{last:%a %H:%M} ET"
             snap["data_age_min"] = (datetime.now(data.NY) - last).total_seconds() / 60
 
-        bd = guard("benchmark data", lambda: data.daily(bench))
+        bd = guard("benchmark data", lambda: data.cached(f"d:{bench}", 600, lambda: data.daily(bench)))
         if bd is not None and len(bd) > 2:
             bp = float(bd["Close"].iloc[-1])
             alerts += guard("relative strength", lambda: signals.detect_relative_strength(
                 d, price, bd, bp, cfg, sym, bench)) or []
 
-        ne = guard("earnings", lambda: data.next_earnings(sym))
+        ne = guard("earnings", lambda: data.cached(f"e:{sym}", 3600, lambda: data.next_earnings(sym)))
         alerts += signals.detect_earnings(ne, datetime.now(timezone.utc).astimezone(data.NY), sym)
 
-    hl = guard("news", lambda: news.fetch_all(sym))
+    hl = guard("news", lambda: data.cached(f"n:{sym}", 300, lambda: news.fetch_all(sym)))
     if hl is not None:
         na, seen_ids = news.detect_news(hl, set(state.seen_news), cfg, sym,
                                         first_run=state.first_run)
@@ -80,7 +83,7 @@ def run_once(cfg: dict, notify_on: bool = True, quiet: bool = False) -> list[Ale
     fresh.sort(key=lambda a: -a.severity)
     for a in fresh:
         if notify_on:
-            notify.send(a, cfg)
+            notify.send(a, cfg, snap)
             state.mark(a.key)
             log_alert(a)
         else:

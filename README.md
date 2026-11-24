@@ -5,13 +5,23 @@ Data: yfinance (free, ~15 min delayed at worst) + Google News RSS. No API keys.
 
 ## Run
 
+The watcher runs on this PC: every 90 s during US market hours, every 15 min otherwise, and pops up
+a Windows notification. It starts hidden at every logon.
+
 ```powershell
-.\.venv\Scripts\python.exe -m nvda_tracker test-notify   # confirm notifications work
+powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1            # install + start
+powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1 -Remove    # stop + uninstall
+Get-Content data\watch.log -Tail 20                                          # what it's doing
+.\.venv\Scripts\python.exe -m nvda_tracker status        # price/volume/trend snapshot now
+.\.venv\Scripts\python.exe -m nvda_tracker test-notify   # confirm the pop-up works
 .\.venv\Scripts\python.exe -m nvda_tracker dry-run       # show what would alert, record nothing
-.\.venv\Scripts\python.exe -m nvda_tracker check         # one real pass
-.\.venv\Scripts\python.exe -m nvda_tracker watch         # loop (every 5 min)
-powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1   # run every 10 min in background
 ```
+
+If the PC is asleep or off, nothing is checked. The GitHub Actions workflow is manual-only: its cron
+schedule was far too unreliable for timely alerts (it ran 2 of ~140 expected times in a day).
+
+After the market closes, "right now" alerts (price move, volume) are suppressed because they would
+only be a late recap; daily-signal and news alerts still go out.
 
 ## What it detects
 

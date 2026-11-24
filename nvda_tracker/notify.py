@@ -29,6 +29,7 @@ def _toast(title: str, body: str) -> None:
     subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", enc],
         env=env, check=False, capture_output=True, timeout=20,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),  # no console flash from pythonw
     )
 
 
@@ -102,8 +103,11 @@ def send_digest(alerts: list[Alert], cfg: dict, snap: dict | None = None) -> Non
         print(f"  (github issue failed: {e})")
 
 
-def send(alert: Alert, cfg: dict) -> None:
+def send(alert: Alert, cfg: dict, snap: dict | None = None) -> None:
     n = cfg["notify"]
+    if snap and "pct" in snap:  # put the price in the pop-up so it's useful without opening anything
+        alert = Alert(**{**alert.__dict__,
+                         "body": f"${snap['price']:.2f} ({snap['pct']:+.1f}% today). {alert.body}"})
     tag = f"[{SEVERITY_NAMES[alert.severity]}]"
     print(f"{_EMOJI.get(alert.kind, '🟡')} {tag} {alert.title}\n    {alert.body}"
           + (f"\n    {alert.url}" if alert.url else ""))

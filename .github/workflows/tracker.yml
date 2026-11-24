@@ -1,8 +1,11 @@
 name: nvda-tracker
 
 on:
-  schedule:
-    - cron: "7-59/10 * * * *"   # :07 :17 :27 :37 :47 :57 (off the busy :00/:30 marks)
+  # The cron schedule is disabled: GitHub ran 2 of ~140 expected runs in 24h, so alerts arrived
+  # after the move. The PC watcher (scripts/install_task.ps1) is the primary runner now.
+  # To re-enable, add back:
+  #   schedule:
+  #     - cron: "7-59/10 * * * *"
   workflow_dispatch:
     inputs:
       send_test:
