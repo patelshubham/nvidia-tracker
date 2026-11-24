@@ -18,6 +18,17 @@ def _merge(base: dict, over: dict) -> dict:
     return base
 
 
+def save_local_notify(values: dict[str, str]) -> None:
+    """Merge string settings into [notify] of config.local.toml (the git-ignored secrets file)."""
+    current: dict = {}
+    if LOCAL_PATH.exists():
+        with open(LOCAL_PATH, "rb") as f:
+            current = tomllib.load(f)
+    notify = {**current.get("notify", {}), **values}
+    lines = ["[notify]"] + [f'{k} = "{str(v).replace(chr(34), "")}"' for k, v in notify.items()]
+    LOCAL_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
 def load(path: Path | None = None) -> dict:
     """config.toml, overridden by config.local.toml, then env vars (NTFY_TOPIC, NVDA_TOAST=0)."""
     with open(Path(path) if path else DEFAULT_PATH, "rb") as f:

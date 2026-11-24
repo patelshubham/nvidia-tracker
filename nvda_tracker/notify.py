@@ -46,6 +46,29 @@ def _ntfy(topic: str, alert: Alert) -> None:
     urllib.request.urlopen(req, timeout=10).close()
 
 
+def telegram_api(token: str, method: str, payload: dict | None = None) -> dict:
+    """Call the Telegram Bot API. Raises on HTTP/network errors."""
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/{method}",
+        data=json.dumps(payload or {}).encode(), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+
+def _telegram(token: str, chat_id: str, alert: Alert) -> None:
+    import html
+
+    text = f"{_EMOJI.get(alert.kind, '🟡')} <b>{html.escape(alert.title)}</b>\n{html.escape(alert.body)}"
+    if alert.url:
+        text += f'\n<a href="{html.escape(alert.url, quote=True)}">Read more</a>'
+    telegram_api(token, "sendMessage", {
+        "chat_id": chat_id, "text": text, "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+        # INFO alerts arrive silently; warnings and criticals make a sound.
+        "disable_notification": alert.severity <= INFO,
+    })
+
+
 def snapshot_md(snap: dict, sym: str) -> str:
     """The 'what's going on with the stock right now' block shown at the top of every alert."""
     if "pct" not in snap:
@@ -116,6 +139,11 @@ def send(alert: Alert, cfg: dict, snap: dict | None = None) -> None:
             _toast(f"{_EMOJI.get(alert.kind, '🟡')} {alert.title}", alert.body)
         except Exception as e:
             print(f"  (toast failed: {e})")
+    if n.get("telegram_token") and n.get("telegram_chat_id"):
+        try:
+            _telegram(n["telegram_token"], str(n["telegram_chat_id"]), alert)
+        except Exception as e:  # never print the URL: it contains the bot token
+            print(f"  (telegram failed: {type(e).__name__})")
     if n.get("ntfy_topic"):
         try:
             _ntfy(n["ntfy_topic"], alert)

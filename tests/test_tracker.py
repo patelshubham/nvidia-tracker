@@ -99,6 +99,25 @@ def test_stale_intraday_alerts_dropped_after_close():
     assert len(drop_stale(mixed, live=True)) == 2
 
 
+def test_telegram_message_is_escaped_and_silent_for_info(monkeypatch):
+    from nvda_tracker import notify
+    from nvda_tracker.models import INFO, Alert
+    sent = {}
+    monkeypatch.setattr(notify, "telegram_api", lambda tok, m, p=None: sent.update(m=m, p=p))
+    notify._telegram("T", "42", Alert("k", "NVDA <b>&", "x < y", severity=INFO, url="http://a/?q=1&r=2"))
+    assert sent["m"] == "sendMessage" and sent["p"]["chat_id"] == "42"
+    assert "&lt;b&gt;&amp;" in sent["p"]["text"] and sent["p"]["disable_notification"] is True
+
+
+def test_save_local_notify_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LOCAL_PATH", tmp_path / "local.toml")
+    config.save_local_notify({"telegram_token": "abc:123", "telegram_chat_id": "42"})
+    config.save_local_notify({"ntfy_topic": ""})
+    import tomllib
+    got = tomllib.loads((tmp_path / "local.toml").read_text())["notify"]
+    assert got == {"telegram_token": "abc:123", "telegram_chat_id": "42", "ntfy_topic": ""}
+
+
 def test_rsi_bounds():
     s = pd.Series(np.linspace(100, 200, 60))
     assert signals.rsi(s).iloc[-1] > 95

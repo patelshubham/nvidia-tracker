@@ -7,6 +7,10 @@ benchmark = "SMH"          # semiconductor ETF used for relative-strength checks
 [notify]
 toast = true               # Windows desktop notification
 github_issues = true       # in GitHub Actions: open an issue per run -> GitHub emails/pushes you
+# Telegram phone push. Secrets go in config.local.toml (git-ignored), not here. Run
+#   python -m nvda_tracker telegram-setup
+telegram_token = ""
+telegram_chat_id = ""
 # ntfy.sh push to your phone: install the ntfy app, subscribe to a long random
 # topic name, and put it here. Anyone who knows the topic can read it, so make it unguessable.
 ntfy_topic = ""
