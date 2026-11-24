@@ -80,15 +80,79 @@ def detect_price(daily: pd.DataFrame, price: float, cfg: dict, sym: str) -> list
     if abs(pct) >= c["min_abs_pct"] and abs(z) >= c["z_warn"]:
         sev = CRITICAL if abs(z) >= c["z_critical"] else WARN
         up = pct > 0
+        # Re-alert every `step_pct` further along, so a day that keeps running keeps notifying you.
+        leg = int(abs(pct) // c["step_pct"])
         out.append(Alert(
-            key=f"price:{session}:{'up' if up else 'down'}:{sev}",
+            key=f"price:{session}:{'up' if up else 'down'}:{leg}",
             title=f"{sym} {'surging' if up else 'dropping'} {pct:+.1f}%",
             body=f"${price:.2f} vs prev close ${prev_close:.2f}. "
                  f"That is {abs(z):.1f} std devs vs its typical daily move ({sd:.1f}%).",
             severity=sev,
             kind=WATCH,
+            intraday=True,
         ))
     return out
+
+
+def detect_velocity(intraday: pd.DataFrame, live: bool, cfg: dict, sym: str) -> list[Alert]:
+    """A sharp move over the last 30/60 minutes. Catches a move while it is still happening,
+    long before the day-over-day change looks unusual."""
+    if not live or intraday.empty:
+        return []
+    c = cfg["velocity"]
+    today = intraday.index[-1].date()
+    bars = intraday[intraday.index.date == today]["Close"]
+    out: list[Alert] = []
+    for minutes, thr in ((30, c["pct_30m"]), (60, c["pct_60m"])):
+        n = minutes // 5
+        if len(bars) <= n:
+            continue
+        start, now = float(bars.iloc[-1 - n]), float(bars.iloc[-1])
+        pct = (now / start - 1) * 100
+        if abs(pct) < thr:
+            continue
+        up = pct > 0
+        leg = int(abs(pct) // thr)
+        out.append(Alert(
+            key=f"vel:{today}:{minutes}m:{'up' if up else 'down'}:{leg}",
+            title=f"{sym} {'jumped' if up else 'fell'} {pct:+.1f}% in {minutes} min",
+            body=f"${start:.2f} to ${now:.2f} over the last {minutes} minutes. A fast, active move.",
+            severity=CRITICAL if abs(pct) >= 2 * thr else WARN,
+            intraday=True,
+        ))
+    return out
+
+
+def detect_volume_burst(intraday: pd.DataFrame, live: bool, cfg: dict, sym: str) -> list[Alert]:
+    """Last 15 minutes of volume vs the same clock minutes on prior sessions. Spots a surge
+    of activity right as it starts, which the cumulative-volume check dilutes."""
+    if not live or intraday.empty:
+        return []
+    today = intraday.index[-1].date()
+    recent = intraday.iloc[-3:]
+    if (recent.index.date != today).any():
+        return []
+    times = set(recent.index.time)
+    dates = intraday.index.date
+    prior = []
+    for d in sorted(set(dates) - {today})[-10:]:
+        day = intraday[dates == d]
+        prior.append(day.loc[[t in times for t in day.index.time], "Volume"].sum())
+    prior = [p for p in prior if p > 0]
+    if len(prior) < 5:
+        return []
+    ratio = float(recent["Volume"].sum() / (sum(prior) / len(prior)))
+    if ratio < cfg["volume"]["burst_rel"]:
+        return []
+    t = recent.index[-1]
+    move = (float(recent["Close"].iloc[-1]) / float(recent["Open"].iloc[0]) - 1) * 100
+    return [Alert(
+        key=f"burst:{today}:{t.hour}:{t.minute // 30}",
+        title=f"{sym} volume burst {ratio:.1f}x in last 15 min",
+        body=f"Trading {ratio:.1f}x the usual pace for this time of day; price {move:+.1f}% over those bars.",
+        severity=CRITICAL if ratio >= 2 * cfg["volume"]["burst_rel"] else WARN,
+        intraday=True,
+    )]
 
 
 def detect_gap(daily: pd.DataFrame, cfg: dict, sym: str) -> list[Alert]:
@@ -104,6 +168,7 @@ def detect_gap(daily: pd.DataFrame, cfg: dict, sym: str) -> list[Alert]:
         title=f"{sym} gapped {gap:+.1f}% at the open",
         body=f"Opened ${row['Open']:.2f} vs prev close ${prev['Close']:.2f}.",
         severity=WARN,
+        intraday=True,
     )]
 
 
@@ -134,6 +199,7 @@ def detect_volume(daily: pd.DataFrame, intraday: pd.DataFrame, live: bool,
         title=f"{sym} volume {rv:.1f}x normal",
         body=f"{rv:.1f}x ({label}). {meaning}",
         severity=sev,
+        intraday=True,
     )]
 
 
@@ -221,6 +287,7 @@ def detect_relative_strength(daily: pd.DataFrame, price: float, bench_daily: pd.
         body=f"{sym} {own:+.1f}% vs {bench} {ref:+.1f}% today. "
              + ("Stock-specific catalyst, not just sector flow." if diff else ""),
         severity=INFO,
+        intraday=True,
     )]
 
 

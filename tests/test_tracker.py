@@ -51,6 +51,54 @@ def test_intraday_relative_volume():
     assert abs(signals.relative_volume_intraday(df) - 3.0) < 1e-6
 
 
+def make_intraday(sessions=8, today_close_mult=1.0, today_vol_mult=1.0):
+    """5-minute bars 09:30-15:55 ET; the final session is 'today'."""
+    days = pd.bdate_range(end="2026-11-20", periods=sessions, tz="America/New_York")
+    rows = []
+    for k, day in enumerate(days):
+        today = k == sessions - 1
+        for b in range(78):
+            ts = day.replace(hour=9, minute=30) + pd.Timedelta(minutes=5 * b)
+            px = 100.0
+            if today and b >= 72:  # last 30 minutes of the day are the move
+                px = 100.0 * (1 + (today_close_mult - 1) * (b - 71) / 6)
+            vol = 1000.0 * (today_vol_mult if today and b >= 75 else 1.0)
+            rows.append((ts, px, px, vol))
+    return pd.DataFrame(rows, columns=["t", "Open", "Close", "Volume"]).set_index("t")
+
+
+def test_velocity_flags_fast_move_while_live():
+    out = signals.detect_velocity(make_intraday(today_close_mult=1.04), True, CFG, "NVDA")
+    assert out and out[0].intraday and "jumped" in out[0].title
+
+
+def test_velocity_quiet_and_silent_when_closed():
+    assert signals.detect_velocity(make_intraday(), True, CFG, "NVDA") == []
+    assert signals.detect_velocity(make_intraday(today_close_mult=1.2), False, CFG, "NVDA") == []
+
+
+def test_volume_burst_detected():
+    out = signals.detect_volume_burst(make_intraday(today_vol_mult=5), True, CFG, "NVDA")
+    assert out and out[0].intraday
+    assert signals.detect_volume_burst(make_intraday(), True, CFG, "NVDA") == []
+
+
+def test_price_alert_escalates_as_move_extends():
+    d = make_daily()
+    prev = float(d["Close"].iloc[-2])
+    k1 = signals.detect_price(d, prev * 1.08, CFG, "NVDA")[0].key
+    k2 = signals.detect_price(d, prev * 1.20, CFG, "NVDA")[0].key
+    assert k1 != k2
+
+
+def test_stale_intraday_alerts_dropped_after_close():
+    from nvda_tracker.models import Alert
+    from nvda_tracker.runner import drop_stale
+    mixed = [Alert("a", "x", "y", intraday=True), Alert("b", "news", "y")]
+    assert [a.key for a in drop_stale(mixed, live=False)] == ["b"]
+    assert len(drop_stale(mixed, live=True)) == 2
+
+
 def test_rsi_bounds():
     s = pd.Series(np.linspace(100, 200, 60))
     assert signals.rsi(s).iloc[-1] > 95

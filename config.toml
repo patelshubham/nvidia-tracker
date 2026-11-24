@@ -16,11 +16,17 @@ z_warn = 2.0               # move vs. 60-day daily-return std dev
 z_critical = 3.0
 min_abs_pct = 2.0          # ignore moves smaller than this, however "unusual"
 gap_pct = 2.5              # open vs. previous close
+step_pct = 4.0             # re-alert each time the day's move extends by this much
+
+[velocity]                 # fast moves while they are happening
+pct_30m = 2.0              # price change over the last 30 minutes
+pct_60m = 3.0              # ... or the last 60 minutes
 
 [volume]
 rel_warn = 1.6             # volume vs. same time-of-day average over last 20 sessions
 rel_critical = 2.5
-min_minutes_after_open = 30
+min_minutes_after_open = 15
+burst_rel = 3.0            # last 15 min of volume vs same clock minutes on prior sessions
 
 [momentum]
 return_5d_pct = 8.0

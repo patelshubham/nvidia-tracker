@@ -36,6 +36,12 @@ def collect(cfg: dict, state: State) -> tuple[list[Alert], dict]:
         alerts += guard("volume", lambda: signals.detect_volume(
             d, i if i is not None else d.iloc[0:0], live, mins, cfg, sym)) or []
         alerts += guard("momentum", lambda: signals.detect_momentum(d, price, cfg, sym)) or []
+        if i is not None and not i.empty:
+            alerts += guard("velocity", lambda: signals.detect_velocity(i, live, cfg, sym)) or []
+            alerts += guard("volume burst", lambda: signals.detect_volume_burst(i, live, cfg, sym)) or []
+            last = i.index[-1].to_pydatetime().astimezone(data.NY)
+            snap["bar_time"] = f"{last:%a %H:%M} ET"
+            snap["data_age_min"] = (datetime.now(data.NY) - last).total_seconds() / 60
 
         bd = guard("benchmark data", lambda: data.daily(bench))
         if bd is not None and len(bd) > 2:
@@ -60,9 +66,16 @@ def collect(cfg: dict, state: State) -> tuple[list[Alert], dict]:
     return alerts, snap
 
 
+def drop_stale(alerts: list[Alert], live: bool) -> list[Alert]:
+    """After the close, 'surging now' / 'volume spike' alerts describe a move that is already over.
+    They arrive too late to act on, so don't send them. Daily-bar and news alerts are kept."""
+    return alerts if live else [a for a in alerts if not a.intraday]
+
+
 def run_once(cfg: dict, notify_on: bool = True, quiet: bool = False) -> list[Alert]:
     state = State()
     alerts, snap = collect(cfg, state)
+    alerts = drop_stale(alerts, bool(snap.get("live")))
     fresh = [a for a in alerts if not state.already_fired(a.key)]
     fresh.sort(key=lambda a: -a.severity)
     for a in fresh:

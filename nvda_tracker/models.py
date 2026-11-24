@@ -19,3 +19,6 @@ class Alert:
     severity: int = WARN
     kind: str = WATCH
     url: str = ""
+    # True for alerts about what the price/volume is doing *right now*. These are only useful
+    # while the market is open; after the close they are just a late recap, so they're dropped.
+    intraday: bool = False

@@ -50,7 +50,10 @@ def snapshot_md(snap: dict, sym: str) -> str:
     if "pct" not in snap:
         return ""
     rv = snap.get("rel_volume")
-    state = "live" if snap.get("live") else f"last close, {snap.get('session')}"
+    if snap.get("live"):
+        state = f"live, data as of {snap.get('bar_time', '?')} ({snap.get('data_age_min', 0):.0f} min old)"
+    else:
+        state = f"market closed, last session {snap.get('session')}"
     rows = [
         f"**{sym} ${snap['price']:.2f} ({snap['pct']:+.1f}% today)** · {state}",
         f"- Volume: {rv:.1f}x normal" if rv else "- Volume: n/a",
